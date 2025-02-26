@@ -18,9 +18,8 @@ fn start() {
     window.request_animation_frame(closure.as_ref().unchecked_ref()).unwrap();
     closure.forget();
 }
+// https://rustwasm.github.io/wasm-bindgen/examples/request-animation-frame.html
 
-// #[allow(non_upper_case_globals)]
-// const draw: LazyCell<Closure<dyn FnMut() -> ()>> = LazyCell::new(|| Closure::new(_draw));
 fn draw() {
     let window = web_sys::window().unwrap();
     let canvas = window.document().unwrap().get_element_by_id("game_canvas").unwrap().unchecked_into::<HtmlCanvasElement>();
