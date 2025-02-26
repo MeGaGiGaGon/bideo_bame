@@ -20,8 +20,6 @@ html = f"""
 <html>
     <head>
         <title>Notan App</title>
-        <meta content="text/html;charset=utf-8" http-equiv="Content-Type"/>
-        <meta http-equiv="X-UA-Compatible" content="IE=edge">
         <meta name="viewport"
               content="minimal-ui, width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
         <meta name="apple-mobile-web-app-capable" content="yes">
@@ -39,6 +37,7 @@ html = f"""
             }}
         </style>
     </head>
+    <canvas id="game_canvas"></canvas>
     <body>
     <script type="module" data-info="https://stackoverflow.com/a/43834063">
     const wasm_blob_url = URL.createObjectURL(new Blob([Uint8Array.from(atob("{wasm_base64}"), c => c.charCodeAt(0))], {{type: "application/wasm"}}));
@@ -66,7 +65,6 @@ document.body.appendChild(script_{name});
     js_script.src = URL.createObjectURL(new Blob([js], {{type: "application/javascript"}}));
     js_script.textContent = js;
     document.body.appendChild(js_script);
-    console.log("Initial script done");
     </script>
 
 </body>
