@@ -1,0 +1,3 @@
+skip_macro_invocations = [
+    "add_listener", # It annoys me how un-condensed it makes these.
+]
