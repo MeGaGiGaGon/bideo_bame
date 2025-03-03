@@ -1,4 +1,5 @@
 use std::cell::OnceCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::LazyLock;
@@ -10,6 +11,7 @@ use wasm_bindgen::{
     JsCast,
 };
 use web_sys::js_sys;
+use web_sys::KeyboardEvent;
 use web_sys::MouseEvent;
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement};
 
@@ -91,22 +93,22 @@ fn start() {
         .expect("Cell should not have been set");
     request_animation_frame(recursive_closure.get().unwrap());
 
-    // add_listener!(canvas(), "mousedown", dyn FnMut(_), |event: web_sys::MouseEvent| {
-    //     let mut state = STATE.write().unwrap();
-    //     state
-    //         .mouse_events
-    //         .push(MouseEvent::new(MouseEventType::MouseDown, event));
-    // });
-    // add_listener!(canvas(), "mousemove", dyn FnMut(_), |event: web_sys::MouseEvent| {
-    //     let mut state = STATE.write().unwrap();
-    //     state
-    //         .mouse_events
-    //         .push(MouseEvent::new(MouseEventType::MouseMove, event));
-    // });
-    // add_listener!(canvas(), "mouseup", dyn FnMut(_), |event: web_sys::MouseEvent| {
-    //     let mut state = STATE.write().unwrap();
-    //     state.mouse_events.push(MouseEvent::new(MouseEventType::MouseUp, event));
-    // });
+    add_listener!(canvas(), "mousedown", dyn FnMut(_), |event: MouseEvent| {
+        STATE.write().unwrap().backend.mouse_down(event);
+    });
+    add_listener!(canvas(), "mousemove", dyn FnMut(_), |event: MouseEvent| {
+        STATE.write().unwrap().backend.mouse_move(event);
+    });
+    add_listener!(canvas(), "mouseup", dyn FnMut(_), |event: MouseEvent| {
+        STATE.write().unwrap().backend.mouse_up(event);
+    });
+    
+    add_listener!(document(), "keydown", dyn FnMut(_), |event: KeyboardEvent| {
+        STATE.write().unwrap().backend.key_down(event);
+    });
+    add_listener!(document(), "keyup", dyn FnMut(_), |event: KeyboardEvent| {
+        STATE.write().unwrap().backend.key_up(event);
+    });
 
     // add_listener!(document(), "keydown", dyn FnMut(_), |event: web_sys::KeyboardEvent| {
     //     let mut state = STATE.write().unwrap();
@@ -147,17 +149,28 @@ fn draw(recursive_closure: RecursiveClosure, data: u8) {
     ctx.set_fill_style_str("rgb(255 255 255)");
     ctx.fill_text(&format!("{width} {height}"), 10.0, 10.0)
         .unwrap();
-    // let mut state = STATE.write().unwrap();
-    // state.process_mouse_events();
-    // state.process_keyboard_events();
-    // if state.mouse_is_down {
-    //     ctx.fill_rect(
-    //         state.last_mouse_pos.x.into(),
-    //         state.last_mouse_pos.y.into(),
-    //         10.0,
-    //         10.0,
-    //     );
-    // }
+    let mut state = STATE.write().unwrap();
+    if state.backend.pointer.primary_down {
+        ctx.fill_rect(
+            state.backend.pointer.pos.x.into(),
+            state.backend.pointer.pos.y.into(),
+            10.0,
+            10.0,
+        );
+    }
+    if state.backend.keyboard.w {
+        state.box_pos.y -= 10;
+    }
+    if state.backend.keyboard.a {
+        state.box_pos.x -= 10;
+    }
+    if state.backend.keyboard.s {
+        state.box_pos.y += 10;
+    }
+    if state.backend.keyboard.d {
+        state.box_pos.x += 10;
+    }
+    ctx.fill_rect(state.box_pos.x.into(), state.box_pos.y.into(), 10.0, 10.0);
     request_animation_frame(recursive_closure.get().unwrap());
 }
 
@@ -200,7 +213,19 @@ impl Pointer {
 }
 
 struct Keyboard {
+    w: bool,
+    a: bool,
+    s: bool,
+    d: bool,
+}
 
+impl Keyboard {
+    const START: Self = Self {
+        w: false,
+        a: false,
+        s: false,
+        d: false,
+    };
 }
 
 struct Touch {
@@ -216,7 +241,7 @@ struct Backend {
 impl Backend {
     const START: Self = Self {
         pointer: Pointer::START,
-        keyboard: Keyboard {},
+        keyboard: Keyboard::START,
         touch: Touch {},
     };
 
@@ -228,57 +253,58 @@ impl Backend {
             2 => pointer.primary_down = true,
             3 => pointer.primary_down = true,
             4 => pointer.primary_down = true,
-            x => warn!("Unknown mouse event button id {x}"),
+            x => warn!("Unknown mouse down event button id {x}"), // Ouside specs, log and move on
         };
         pointer.pos = Vec2::new(event.x(), event.y());
+    }
+
+    fn mouse_move(&mut self, event: MouseEvent) {
+        let pointer = &mut self.pointer;
+        pointer.pos = Vec2::new(event.x(), event.y());
+    }
+    
+    fn mouse_up(&mut self, event: MouseEvent) {
+        let pointer = &mut self.pointer;
+        match event.button() {
+            0 => pointer.primary_down = false,
+            1 => pointer.primary_down = false,
+            2 => pointer.primary_down = false,
+            3 => pointer.primary_down = false,
+            4 => pointer.primary_down = false,
+            x => warn!("Unknown mouse up event button id {x}"), // Ouside specs, log and move on
+        };
+        pointer.pos = Vec2::new(event.x(), event.y());
+    }
+
+    fn key_down(&mut self, event: KeyboardEvent) {
+        let keyboard = &mut self.keyboard;
+        match event.code().as_ref() {
+            "KeyW" => keyboard.w = true,
+            "KeyA" => keyboard.a = true,
+            "KeyS" => keyboard.s = true,
+            "KeyD" => keyboard.d = true,
+            x => warn!("Not implemented key down event code {x}"),
+        }
+    }
+    
+    fn key_up(&mut self, event: KeyboardEvent) {
+        let keyboard = &mut self.keyboard;
+        match event.code().as_ref() {
+            "KeyW" => keyboard.w = false,
+            "KeyA" => keyboard.a = false,
+            "KeyS" => keyboard.s = false,
+            "KeyD" => keyboard.d = false,
+            x => warn!("Not implemented key up event code {x}"),
+        }
     }
 }
 
 struct State {
     backend: Backend,
+    box_pos: Vec2
 }
 
 static STATE: RwLock<State> = RwLock::new(State {
     backend: Backend::START,
+    box_pos: Vec2 { x: 0, y: 0 },
 });
-
-// struct State {
-//     counter: u8,
-//     mouse_events: Vec<MouseEvent>,
-//     keyboard_events: Vec<KeyboardEvent>,
-//     mouse_is_down: bool,
-//     last_mouse_pos: Vec2,
-//     touch_events: LazyLock<Arc<Mutex<Vec<(TouchEventType, web_sys::TouchEvent)>>>>,
-// }
-
-// impl State {
-//     /// Should be called once per frame
-//     fn process_mouse_events(&mut self) {
-//         let mouse_events = std::mem::take(&mut self.mouse_events);
-//         // println!("{:?}", mouse_events.clone());
-//         for event in mouse_events {
-//             self.last_mouse_pos = event.pos;
-//             if matches!(event.ty, MouseEventType::MouseDown) {
-//                 self.mouse_is_down = true;
-//             }
-//             if matches!(event.ty, MouseEventType::MouseUp) {
-//                 self.mouse_is_down = false;
-//             }
-//         }
-//     }
-
-//     /// Should be called once per frame
-//     fn process_keyboard_events(&mut self) {
-//         let keyboard_events = std::mem::take(&mut self.keyboard_events);
-//         // println!("{:?}", keyboard_events);
-//     }
-// }
-
-// static STATE: RwLock<State> = RwLock::new(State {
-//     counter: 0,
-//     mouse_events: vec![],
-//     last_mouse_pos: Vec2::new(0, 0),
-//     mouse_is_down: false,
-//     keyboard_events: vec![],
-//     touch_events: LazyLock::new(|| Arc::new(Mutex::new(vec![]))),
-// });
