@@ -1,9 +1,5 @@
 use std::cell::OnceCell;
-use std::collections::HashMap;
 use std::rc::Rc;
-use std::sync::Arc;
-use std::sync::LazyLock;
-use std::sync::Mutex;
 use std::sync::RwLock;
 
 use wasm_bindgen::{
@@ -11,9 +7,11 @@ use wasm_bindgen::{
     JsCast,
 };
 use web_sys::js_sys;
+use web_sys::CanvasRenderingContext2d;
 use web_sys::KeyboardEvent;
 use web_sys::MouseEvent;
-use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement};
+use web_sys::HtmlCanvasElement;
+use web_sys::TouchEvent;
 
 macro_rules! log {
     ( $( $t:tt )* ) => {
@@ -57,7 +55,7 @@ fn canvas() -> HtmlCanvasElement {
         .unwrap()
 }
 
-fn context() -> web_sys::CanvasRenderingContext2d {
+fn context() -> CanvasRenderingContext2d {
     canvas()
         .get_context("2d")
         .unwrap()
@@ -110,14 +108,9 @@ fn start() {
         STATE.write().unwrap().backend.key_up(event);
     });
 
-    // add_listener!(document(), "keydown", dyn FnMut(_), |event: web_sys::KeyboardEvent| {
-    //     let mut state = STATE.write().unwrap();
-    //     state.keyboard_events.push(KeyboardEvent::new(KeyboardEventType::KeyDown, event));
-    // });
-    // add_listener!(document(), "keyup", dyn FnMut(_), |event: web_sys::KeyboardEvent| {
-    //     let mut state = STATE.write().unwrap();
-    //     state.keyboard_events.push(KeyboardEvent::new(KeyboardEventType::KeyUp, event));
-    // });
+    add_listener!(canvas(), "touchstart", dyn FnMut(_), |event: TouchEvent| {
+        STATE.write().unwrap().backend.touch_start(event);
+    });
 
     // add_listener!(canvas(), "touchstart", dyn FnMut(_), |event: web_sys::TouchEvent| {
     //     let mut state = STATE.write().unwrap();
@@ -126,15 +119,6 @@ fn start() {
     // });
 }
 
-// struct App {
-//     last_tick
-// }
-
-// fn main_loop(recursive_closure: RecursiveClosure, app: &mut App) {
-//     request_animation_frame(recursive_closure.get().unwrap());
-// }
-
-// #[apply(js_closure)]
 fn draw(recursive_closure: RecursiveClosure, data: u8) {
     let canvas = canvas();
     let width = window().inner_width().unwrap().as_f64().unwrap() as u32;
@@ -158,6 +142,14 @@ fn draw(recursive_closure: RecursiveClosure, data: u8) {
             10.0,
         );
     }
+    for touch in state.backend.touches.active_touches.iter() {
+        ctx.fill_rect(
+            touch.position.x.into(),
+            touch.position.y.into(),
+            10.0,
+            10.0,
+        );
+    }
     if state.backend.keyboard.w {
         state.box_pos.y -= 10;
     }
@@ -176,6 +168,7 @@ fn draw(recursive_closure: RecursiveClosure, data: u8) {
 
 type RecursiveClosure = Rc<OnceCell<Closure<dyn FnMut()>>>;
 
+#[derive(Debug)]
 struct Vec2 {
     x: i32,
     y: i32,
@@ -192,6 +185,7 @@ impl Vec2 {
     }
 }
 
+#[derive(Debug)]
 struct Pointer {
     primary_down: bool,
     auxillary_down: bool,
@@ -229,32 +223,44 @@ impl Keyboard {
 }
 
 struct Touch {
+    identifier: i32,
+    position: Vec2,
+}
 
+struct Touches {
+    active_touches: Vec<Touch>,
+}
+
+impl Touches {
+    const START: Self = Self {
+        active_touches: Vec::new(),
+    };
 }
 
 struct Backend {
     pointer: Pointer,
     keyboard: Keyboard,
-    touch: Touch,
+    touches: Touches,
 }
 
 impl Backend {
     const START: Self = Self {
         pointer: Pointer::START,
         keyboard: Keyboard::START,
-        touch: Touch {},
+        touches: Touches::START,
     };
 
     fn mouse_down(&mut self, event: MouseEvent) {
         let pointer = &mut self.pointer;
         match event.button() {
             0 => pointer.primary_down = true,
-            1 => pointer.primary_down = true,
-            2 => pointer.primary_down = true,
-            3 => pointer.primary_down = true,
-            4 => pointer.primary_down = true,
+            1 => pointer.auxillary_down = true,
+            2 => pointer.secondary_down = true,
+            3 => pointer.fourth_down = true,
+            4 => pointer.fifth_down = true,
             x => warn!("Unknown mouse down event button id {x}"), // Ouside specs, log and move on
         };
+        // log!("down {} {:?}", event.button(), pointer);
         pointer.pos = Vec2::new(event.x(), event.y());
     }
 
@@ -267,12 +273,13 @@ impl Backend {
         let pointer = &mut self.pointer;
         match event.button() {
             0 => pointer.primary_down = false,
-            1 => pointer.primary_down = false,
-            2 => pointer.primary_down = false,
-            3 => pointer.primary_down = false,
-            4 => pointer.primary_down = false,
+            1 => pointer.auxillary_down = false,
+            2 => pointer.secondary_down = false,
+            3 => pointer.fourth_down = false,
+            4 => pointer.fifth_down = false,
             x => warn!("Unknown mouse up event button id {x}"), // Ouside specs, log and move on
         };
+        // log!("up {} {:?}", event.button(), pointer);
         pointer.pos = Vec2::new(event.x(), event.y());
     }
 
@@ -283,7 +290,7 @@ impl Backend {
             "KeyA" => keyboard.a = true,
             "KeyS" => keyboard.s = true,
             "KeyD" => keyboard.d = true,
-            x => warn!("Not implemented key down event code {x}"),
+            x => warn!("Not yet implemented key down event code {x}"),
         }
     }
     
@@ -294,7 +301,17 @@ impl Backend {
             "KeyA" => keyboard.a = false,
             "KeyS" => keyboard.s = false,
             "KeyD" => keyboard.d = false,
-            x => warn!("Not implemented key up event code {x}"),
+            x => warn!("Not yet implemented key up event code {x}"),
+        }
+    }
+
+    fn touch_start(&mut self, event: TouchEvent) {
+        // event.prevent_default(); // Stop event propigations to stop touches from moving the page
+        let touches = &mut self.touches;
+        let changed_touches = event.changed_touches();
+        for i in 0..changed_touches.length() {
+            let touch = changed_touches.get(i).unwrap();
+            touches.active_touches.push(Touch { identifier: touch.identifier(), position: Vec2::new(touch.client_x(), touch.client_y())});
         }
     }
 }

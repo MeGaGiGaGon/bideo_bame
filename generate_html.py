@@ -37,7 +37,7 @@ html = f"""
             }}
         </style>
     </head>
-    <canvas id="game_canvas"></canvas>
+    <canvas id="game_canvas" style="touch-action: none"></canvas>
     <body>
     <script type="module" data-info="https://stackoverflow.com/a/43834063">
     const wasm_blob_url = URL.createObjectURL(new Blob([Uint8Array.from(atob("{wasm_base64}"), c => c.charCodeAt(0))], {{type: "application/wasm"}}));
