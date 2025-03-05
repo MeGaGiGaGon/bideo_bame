@@ -33,7 +33,6 @@ lto = true
 [lints.clippy]
 all = { level = "warn", priority = -1 }
 # Lints from all we have decided to ignore.
-# type_complexity = "allow" # Bevy queries almost always trigger this.
 
 
 pedantic = { level = "warn", priority = -1 }
@@ -45,27 +44,23 @@ semicolon_if_nothing_returned      = "warn"
 struct_field_names                 = "warn" # Can be removed if it becomes too annoying.
 
 # Lints from pedantic we have decided to ignore. align_by sort "="
-# cast_precision_loss                = "allow" # Unavoidable because of how many floats bevy uses.
-cast_possible_truncation           = "allow" # Often unaviodable due to web-sys function signatures.
-cast_sign_loss                     = "allow" # Often unaviodable due to web-sys function signatures.
-doc_markdown                       = "allow" # Too many false positives.
-explicit_iter_loop                 = "allow" # Recommends less explicit style.
-# match_wildcard_for_single_variants = "allow" # Core pattern used in behaviors.
-# module_name_repetitions            = "allow" # Causes issues with name duplication on Plugins.
-needless_pass_by_value             = "allow" # I don't see the point for internal-use-only things.
-trivially_copy_pass_by_ref         = "allow" # Annoying with very minor benefits.
-# wildcard_imports                   = "allow" # Wildcard imports are nice.
+cast_possible_truncation   = "allow" # Often unaviodable due to web-sys function signatures.
+cast_sign_loss             = "allow" # Often unaviodable due to web-sys function signatures.
+doc_markdown               = "allow" # Too many false positives.
+explicit_iter_loop         = "allow" # Recommends less explicit style.
+needless_pass_by_value     = "allow" # I don't see the point for internal-use-only things.
+trivially_copy_pass_by_ref = "allow" # Annoying with very minor benefits.
 
 
 restriction = { level = "warn", priority = -1 }
 blanket_clippy_restriction_lints = "allow" # Blanket enable restriction to go through all the lints faster
 
 # Lints from restriction we will actively use. align_by sort "="
+clone_on_ref_ptr      = "warn" # Promotes more explicit code
 mod_module_files      = "warn" # No mod.rs files
 partial_pub_fields    = "warn" # Helps keep behaviors explicit.
 pub_without_shorthand = "warn" # No "in" for pub(crate).
 unwrap_used           = "warn" # If an unwrap is needed, it should instead be an expect
-clone_on_ref_ptr      = "warn" # Promotes more explicit code
 
 # Lints from restriction we have decided to ignore.
 # Possibly useful for release builds. align_by sort "="
@@ -74,9 +69,9 @@ panic                    = "allow"
 print_stdout             = "allow"
 use_debug                = "allow"
 # Annoying. align_by sort "="
+arbitrary_source_item_ordering  = "allow" # Non-alphabetical ordering is useful for showing structure
 as_conversions                  = "allow"
 float_arithmetic                = "allow"
-# impl_trait_in_params            = "allow" # TODO: Do we want this lint?
 integer_division_remainder_used = "allow"
 min_ident_chars                 = "allow"
 missing_docs_in_private_items   = "allow"
@@ -86,18 +81,14 @@ single_call_fn                  = "allow"
 single_char_lifetime_names      = "allow"
 std_instead_of_alloc            = "allow"
 std_instead_of_core             = "allow"
-arbitrary_source_item_ordering  = "allow" # Non-alphabetical ordering is useful for showing structure
 struct_excessive_bools          = "allow"
-# unreachable                     = "allow" # TODO: Do we want this lint?
 # Possibly useful, but overly broad. align_by sort "="
 absolute_paths          = "allow"
 arithmetic_side_effects = "allow"
-# else_if_without_else    = "allow" # TODO: Do we want this lint?
+expect_used             = "allow" # Sometimes an unwrap might be needed, which should use expect
 implicit_return         = "allow"
 pattern_type_mismatch   = "allow"
-wildcard_enum_match_arm = "allow"
-# Opposes our existing style. align_by sort "="
-expect_used             = "allow" # Sometimes an unwrap might be needed, which should use expect
 pub_with_shorthand      = "allow" # Required "in" for pub(in ...).
 self_named_module_files = "allow" # No mod.rs files.
 str_to_string           = "allow" # Recommends less explicit style.
+wildcard_enum_match_arm = "allow"
