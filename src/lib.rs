@@ -4,24 +4,24 @@ use std::sync::RwLock;
 
 use wasm_bindgen::{
     prelude::{wasm_bindgen, Closure},
-    JsCast,
+    JsCast as _,
 };
-use web_sys::js_sys;
+
 use web_sys::CanvasRenderingContext2d;
 use web_sys::KeyboardEvent;
 use web_sys::MouseEvent;
 use web_sys::HtmlCanvasElement;
 use web_sys::TouchEvent;
 
-macro_rules! log {
-    ( $( $t:tt )* ) => {
-        web_sys::console::log_1(&format!( $( $t )* ).into())
-    }
-}
-
 macro_rules! warn {
     ( $( $t:tt )* ) => {
         web_sys::console::warn_1(&format!( $( $t )* ).into())
+    }
+}
+
+macro_rules! error {
+    ( $( $t:tt )* ) => {
+        web_sys::console::error_1(&format!( $( $t )* ).into())
     }
 }
 
@@ -41,37 +41,30 @@ fn document() -> web_sys::Document {
         .expect("a window should always have a document")
 }
 
-fn body() -> web_sys::HtmlElement {
-    document()
-        .body()
-        .expect("a document should always have a body")
-}
-
 fn canvas() -> HtmlCanvasElement {
     document()
         .get_element_by_id("game_canvas")
-        .expect("game_canvas should exist")
+        .expect("element id game_canvas should exist")
         .dyn_into::<HtmlCanvasElement>()
-        .unwrap()
+        .expect("if element id game_canvas exists it should be a canvas, and this cast shouldn't fail")
 }
 
 fn context() -> CanvasRenderingContext2d {
     canvas()
         .get_context("2d")
-        .unwrap()
-        .unwrap()
+        .expect("the canvas's 2d context should have been loaded by now")
+        .expect("the canvas's 2d context should have been loaded by now")
         .dyn_into()
-        .unwrap()
-}
-
-fn timestamp() -> f64 {
-    js_sys::Date::now()
+        .expect("this cast should always succeed")
 }
 
 macro_rules! add_listener {
-    ($target:expr, $event:literal, $closure_type:ty, $($closure:tt)*) => {
+    ($target:expr, $event:literal, |$event_ident:ident: $c_v_t:ty| {$($closure:tt)*}) => {
         {
-            let closure = Closure::<$closure_type>::new($($closure)*);
+            let closure = Closure::<dyn FnMut(_)>::new(|$event_ident: $c_v_t| {
+                $event_ident.prevent_default();
+                $($closure)*
+            });
             $target
                 .add_event_listener_with_callback($event, closure.as_ref().unchecked_ref())
                 .unwrap();
@@ -83,34 +76,43 @@ macro_rules! add_listener {
 #[wasm_bindgen(start)]
 fn start() {
     console_error_panic_hook::set_once();
-    let data = 1;
     let recursive_closure: RecursiveClosure = Rc::new(OnceCell::new());
-    let second_ref = recursive_closure.clone();
+    let second_ref = Rc::clone(&recursive_closure);
     recursive_closure
-        .set(Closure::new(move || draw(second_ref.clone(), data)))
+        .set(Closure::new(move || draw(Rc::clone(&second_ref))))
         .expect("Cell should not have been set");
-    request_animation_frame(recursive_closure.get().unwrap());
+    request_animation_frame(recursive_closure.get().expect("Since JS is only single threaded, this should always succeed"));
 
-    add_listener!(canvas(), "mousedown", dyn FnMut(_), |event: MouseEvent| {
-        STATE.write().unwrap().backend.mouse_down(event);
+    add_listener!(canvas(), "mousedown", |event: MouseEvent| {
+        STATE.write().expect("Since JS is only single threaded, this should always succeed").backend.mouse_down(event);
     });
-    add_listener!(canvas(), "mousemove", dyn FnMut(_), |event: MouseEvent| {
-        STATE.write().unwrap().backend.mouse_move(event);
+    add_listener!(canvas(), "mousemove", |event: MouseEvent| {
+        STATE.write().expect("Since JS is only single threaded, this should always succeed").backend.mouse_move(event);
     });
-    add_listener!(canvas(), "mouseup", dyn FnMut(_), |event: MouseEvent| {
-        STATE.write().unwrap().backend.mouse_up(event);
+    add_listener!(canvas(), "mouseup", |event: MouseEvent| {
+        STATE.write().expect("Since JS is only single threaded, this should always succeed").backend.mouse_up(event);
     });
     
-    add_listener!(document(), "keydown", dyn FnMut(_), |event: KeyboardEvent| {
-        STATE.write().unwrap().backend.key_down(event);
+    add_listener!(document(), "keydown", |event: KeyboardEvent| {
+        STATE.write().expect("Since JS is only single threaded, this should always succeed").backend.key_down(event);
     });
-    add_listener!(document(), "keyup", dyn FnMut(_), |event: KeyboardEvent| {
-        STATE.write().unwrap().backend.key_up(event);
+    add_listener!(document(), "keyup", |event: KeyboardEvent| {
+        STATE.write().expect("Since JS is only single threaded, this should always succeed").backend.key_up(event);
     });
 
-    add_listener!(canvas(), "touchstart", dyn FnMut(_), |event: TouchEvent| {
-        STATE.write().unwrap().backend.touch_start(event);
+    add_listener!(canvas(), "touchstart", |event: TouchEvent| {
+        STATE.write().expect("Since JS is only single threaded, this should always succeed").backend.touch_start(event);
     });
+    add_listener!(canvas(), "touchmove", |event: TouchEvent| {
+        STATE.write().expect("Since JS is only single threaded, this should always succeed").backend.touch_move(event);
+    });
+    add_listener!(canvas(), "touchend", |event: TouchEvent| {
+        STATE.write().expect("Since JS is only single threaded, this should always succeed").backend.touch_end_or_cancel(event);
+    });
+    add_listener!(canvas(), "touchcancel", |event: TouchEvent| {
+        STATE.write().expect("Since JS is only single threaded, this should always succeed").backend.touch_end_or_cancel(event);
+    });
+
 
     // add_listener!(canvas(), "touchstart", dyn FnMut(_), |event: web_sys::TouchEvent| {
     //     let mut state = STATE.write().unwrap();
@@ -119,10 +121,10 @@ fn start() {
     // });
 }
 
-fn draw(recursive_closure: RecursiveClosure, data: u8) {
+fn draw(recursive_closure: RecursiveClosure) {
     let canvas = canvas();
-    let width = window().inner_width().unwrap().as_f64().unwrap() as u32;
-    let height = window().inner_height().unwrap().as_f64().unwrap() as u32;
+    let width = window().inner_width().expect("this property should always be accessable").as_f64().expect("I don't see how this could fail") as u32;
+    let height = window().inner_height().expect("this property should always be accessable").as_f64().expect("I don't see how this could fail") as u32;
     canvas.set_width(width);
     canvas.set_height(height);
     let ctx = context();
@@ -132,8 +134,8 @@ fn draw(recursive_closure: RecursiveClosure, data: u8) {
     ctx.fill_rect(30.0, 30.0, 50.0, 50.0);
     ctx.set_fill_style_str("rgb(255 255 255)");
     ctx.fill_text(&format!("{width} {height}"), 10.0, 10.0)
-        .unwrap();
-    let mut state = STATE.write().unwrap();
+        .expect("The default font should exist, so this shouldn't fail");
+    let mut state = STATE.write().expect("Since JS is only single threaded, this should always succeed");
     if state.backend.pointer.primary_down {
         ctx.fill_rect(
             state.backend.pointer.pos.x.into(),
@@ -163,7 +165,7 @@ fn draw(recursive_closure: RecursiveClosure, data: u8) {
         state.box_pos.x += 10;
     }
     ctx.fill_rect(state.box_pos.x.into(), state.box_pos.y.into(), 10.0, 10.0);
-    request_animation_frame(recursive_closure.get().unwrap());
+    request_animation_frame(recursive_closure.get().expect("Since JS is only single threaded, this should always succeed"));
 }
 
 type RecursiveClosure = Rc<OnceCell<Closure<dyn FnMut()>>>;
@@ -260,7 +262,6 @@ impl Backend {
             4 => pointer.fifth_down = true,
             x => warn!("Unknown mouse down event button id {x}"), // Ouside specs, log and move on
         };
-        // log!("down {} {:?}", event.button(), pointer);
         pointer.pos = Vec2::new(event.x(), event.y());
     }
 
@@ -279,7 +280,6 @@ impl Backend {
             4 => pointer.fifth_down = false,
             x => warn!("Unknown mouse up event button id {x}"), // Ouside specs, log and move on
         };
-        // log!("up {} {:?}", event.button(), pointer);
         pointer.pos = Vec2::new(event.x(), event.y());
     }
 
@@ -306,12 +306,34 @@ impl Backend {
     }
 
     fn touch_start(&mut self, event: TouchEvent) {
-        // event.prevent_default(); // Stop event propigations to stop touches from moving the page
         let touches = &mut self.touches;
         let changed_touches = event.changed_touches();
         for i in 0..changed_touches.length() {
-            let touch = changed_touches.get(i).unwrap();
+            let touch = changed_touches.get(i).expect("Based on the above loop this should always succeed");
             touches.active_touches.push(Touch { identifier: touch.identifier(), position: Vec2::new(touch.client_x(), touch.client_y())});
+        }
+    }
+    
+    fn touch_move(&mut self, event: TouchEvent) {
+        let touches = &mut self.touches;
+        let changed_touches = event.changed_touches();
+        for i in 0..changed_touches.length() {
+            let touch = changed_touches.get(i).expect("Based on the above loop this should always succeed");
+            if let Some(existing_touch) = touches.active_touches.iter_mut().find(|x| x.identifier == touch.identifier()) {
+                existing_touch.position = Vec2::new(touch.client_x(), touch.client_y());
+            } else {
+                error!("Received touchmove event with id {} and no corresponding active_touches entry", touch.identifier());
+            }
+        }
+    }
+    
+    fn touch_end_or_cancel(&mut self, event: TouchEvent) {
+        let touches = &mut self.touches;
+        let changed_touches = event.changed_touches();
+        for i in 0..changed_touches.length() {
+            let touch = changed_touches.get(i).expect("Based on the above loop this should always succeed");
+            let active_touches = std::mem::take(&mut touches.active_touches);
+            touches.active_touches = active_touches.into_iter().filter(|x| x.identifier != touch.identifier()).collect();
         }
     }
 }
