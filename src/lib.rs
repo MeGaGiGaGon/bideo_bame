@@ -112,13 +112,6 @@ fn start() {
     add_listener!(canvas(), "touchcancel", |event: TouchEvent| {
         STATE.write().expect("Since JS is only single threaded, this should always succeed").backend.touch_end_or_cancel(event);
     });
-
-
-    // add_listener!(canvas(), "touchstart", dyn FnMut(_), |event: web_sys::TouchEvent| {
-    //     let mut state = STATE.write().unwrap();
-    //     event.touches();
-    //     // state.touch_events.push(TouchEvent::new());
-    // });
 }
 
 fn draw(recursive_closure: RecursiveClosure) {
