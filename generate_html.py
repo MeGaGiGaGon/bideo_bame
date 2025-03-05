@@ -19,7 +19,7 @@ snippets = set(re.findall(rf"'./(snippets/{containing_folder.name}-([^/]+)/inlin
 html = f"""
 <html>
     <head>
-        <title>Notan App</title>
+        <title>bideo_bame</title>
         <meta name="viewport"
               content="minimal-ui, width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
         <meta name="apple-mobile-web-app-capable" content="yes">
